@@ -35,16 +35,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold text-white tracking-tight flex items-center">
+              <h1 className="text-lg font-bold text-white tracking-tight flex items-center leading-tight">
                 KURAL<span className="text-emerald-500 font-normal">.AI</span>
               </h1>
-              <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase tracking-widest hidden sm:inline-block">
+              <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded uppercase tracking-widest hidden sm:inline-block leading-none">
                 Search & Voice
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden md:block">
-              Intelligent Search Engine & Neural Speech Studio by Benjamin Clifford
-            </p>
           </div>
         </div>
 
