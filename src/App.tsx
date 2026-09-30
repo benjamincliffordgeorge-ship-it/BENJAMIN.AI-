@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Navbar } from './components/Navbar';
+import { Navbar, StudioTab } from './components/Navbar';
 import { VoiceSelector } from './components/VoiceSelector';
 import { TextInputArea } from './components/TextInputArea';
+import { ScriptLengthIndicator } from './components/ScriptLengthIndicator';
 import { AudioPlayerSection } from './components/AudioPlayerSection';
+import { KuralSearchEngine } from './components/KuralSearchEngine';
+import { LiveVoiceAssistant } from './components/LiveVoiceAssistant';
 import { ExportModal } from './components/ExportModal';
 import { ClipHistory } from './components/ClipHistory';
 import { VoiceId, ToneStyle, GeneratedClip, AudioFormat } from './types';
@@ -15,11 +18,21 @@ import {
 } from './utils/audioEncoder';
 import { synthesizeWebSpeech } from './utils/webSpeechFallback';
 import confetti from 'canvas-confetti';
+import { PricingModal } from './components/PricingModal';
+import { LimitReachedModal } from './components/LimitReachedModal';
+import { WindowsShortcutsModal } from './components/WindowsShortcutsModal';
+import { VoiceHearingModal } from './components/VoiceHearingModal';
+import { CopyrightModal } from './components/CopyrightModal';
+import { useWindowsShortcuts } from './hooks/useWindowsShortcuts';
+import { MonetizationProvider, useMonetization } from './context/MonetizationContext';
 import { AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
-export default function App() {
+function StudioWorkspace() {
+  const [activeTab, setActiveTab] = useState<StudioTab>('search');
+  const { checkFeatureAllowance, consumeFeatureUsage, openPricingModal } = useMonetization();
+
   const [text, setText] = useState<string>(
-    'Namaste! Welcome to BENJAMIN.AI. Convert any script into high fidelity speech with natural Indian, American, British, and Australian accents, and easily export in MP3, WAV, and OGG formats.'
+    'Namaste! Welcome to KURAL AI. Convert any script into high fidelity speech with natural Indian, American, British, and Australian accents, and easily export in MP3, WAV, and OGG formats.'
   );
   const [selectedVoice, setSelectedVoice] = useState<VoiceId>('Aarav');
   const [selectedTone, setSelectedTone] = useState<ToneStyle>('natural');
@@ -31,6 +44,9 @@ export default function App() {
   const [historyClips, setHistoryClips] = useState<GeneratedClip[]>([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
+  const [isHearingModalOpen, setIsHearingModalOpen] = useState<boolean>(false);
+  const [isCopyrightModalOpen, setIsCopyrightModalOpen] = useState<boolean>(false);
   const [exportingFormat, setExportingFormat] = useState<AudioFormat | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
@@ -44,6 +60,13 @@ export default function App() {
   // Perform TTS Generation
   const handleSynthesize = async () => {
     if (!text.trim() || isGenerating) return;
+
+    // Check freemium voice allowance
+    const allowance = checkFeatureAllowance('voice');
+    if (!allowance.allowed) {
+      await consumeFeatureUsage('voice', { charCount: text.length });
+      return;
+    }
 
     try {
       setIsGenerating(true);
@@ -107,6 +130,7 @@ export default function App() {
 
       setCurrentClip(newClip);
       setHistoryClips((prev) => [newClip, ...prev]);
+      await consumeFeatureUsage('voice', { charCount: text.length });
       showToast(`Generated ${newClip.durationSeconds.toFixed(1)}s speech audio!`, 'success');
     } catch (err: unknown) {
       console.error('Speech synthesis error:', err);
@@ -176,21 +200,53 @@ export default function App() {
     showToast('Library cleared', 'info');
   };
 
+  // Register comprehensive Windows shortcuts system
+  useWindowsShortcuts({
+    activeTab,
+    onSelectTab: (tab) => setActiveTab(tab),
+    onSynthesize: handleSynthesize,
+    onOpenExportModal: () => setIsExportModalOpen(true),
+    onOpenHistory: () => setIsHistoryOpen(true),
+    onOpenPricingModal: () => openPricingModal(),
+    onOpenShortcutsModal: () => setIsShortcutsModalOpen(true),
+    onOpenVoiceHearing: () => setIsHearingModalOpen(true),
+    onCloseModals: () => {
+      setIsShortcutsModalOpen(false);
+      setIsHearingModalOpen(false);
+      setIsExportModalOpen(false);
+      setIsHistoryOpen(false);
+    },
+    showToast,
+  });
+
   return (
     <div id="tts-app" className="min-h-screen bg-[#0a0b0d] text-slate-200 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* Top Navigation */}
       <Navbar
         historyCount={historyClips.length}
         onOpenHistory={() => setIsHistoryOpen(true)}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
+        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+        onOpenVoiceHearing={() => setIsHearingModalOpen(true)}
+        onOpenCopyright={() => setIsCopyrightModalOpen(true)}
       />
 
       {/* Main Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main
+        className={`flex-1 flex flex-col ${
+          activeTab === 'search'
+            ? 'w-full h-[calc(100vh-4rem)] p-0 overflow-hidden'
+            : 'max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6'
+        }`}
+      >
         {/* Toast / Notification banner */}
         {toastMessage && (
           <div
             id="app-toast-message"
             className={`p-3 rounded-lg border text-xs font-medium flex items-center justify-between shadow-xl transition-all animate-in fade-in slide-in-from-top-2 duration-150 ${
+              activeTab === 'search' ? 'mx-4 mt-2' : ''
+            } ${
               toastMessage.type === 'success'
                 ? 'bg-[#14171c] border-emerald-500/40 text-emerald-400'
                 : toastMessage.type === 'error'
@@ -215,40 +271,78 @@ export default function App() {
           </div>
         )}
 
-        {/* 2-Column Responsive Workspace Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Voice Models & Tuning (5 Cols) */}
-          <div className="lg:col-span-5 space-y-6">
-            <VoiceSelector
-              selectedVoice={selectedVoice}
-              onSelectVoice={setSelectedVoice}
-              selectedTone={selectedTone}
-              onSelectTone={setSelectedTone}
-              speed={speed}
-              onChangeSpeed={setSpeed}
-              pitch={pitch}
-              onChangePitch={setPitch}
-            />
-          </div>
+        {/* Tab 1: KURAL AI Search Engine (Full ChatGPT/Perplexity Experience) */}
+        {activeTab === 'search' && (
+          <KuralSearchEngine
+            onNavigateToTTS={(scriptText) => {
+              if (scriptText) setText(scriptText);
+              setActiveTab('tts');
+              showToast('Loaded text into Voice Studio!', 'success');
+            }}
+            onNavigateToLiveVoice={() => {
+              setActiveTab('live');
+              showToast('Switched to Live Voice Assistant!', 'info');
+            }}
+            onOpenVoiceHearing={() => setIsHearingModalOpen(true)}
+            onOpenLibrary={() => setIsHistoryOpen(true)}
+            onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+          />
+        )}
 
-          {/* Right Column: Script Input & Active Audio Player & Multi-Format Exporter (7 Cols) */}
-          <div className="lg:col-span-7 space-y-6">
-            <TextInputArea
-              text={text}
-              onChangeText={setText}
-              onSynthesize={handleSynthesize}
-              isGenerating={isGenerating}
-              speed={speed}
-            />
+        {/* Tab 2: Neural TTS Studio */}
+        {activeTab === 'tts' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Voice Models & Tuning (5 Cols) */}
+            <div className="lg:col-span-5 space-y-6">
+              <VoiceSelector
+                selectedVoice={selectedVoice}
+                onSelectVoice={setSelectedVoice}
+                selectedTone={selectedTone}
+                onSelectTone={setSelectedTone}
+                speed={speed}
+                onChangeSpeed={setSpeed}
+                pitch={pitch}
+                onChangePitch={setPitch}
+              />
+            </div>
 
-            <AudioPlayerSection
-              currentClip={currentClip}
-              onExport={handleQuickExport}
-              onOpenExportModal={() => setIsExportModalOpen(true)}
-              exportingFormat={exportingFormat}
-            />
+            {/* Right Column: Script Input & Active Audio Player & Multi-Format Exporter (7 Cols) */}
+            <div className="lg:col-span-7 space-y-6">
+              <TextInputArea
+                text={text}
+                onChangeText={setText}
+                onSynthesize={handleSynthesize}
+                isGenerating={isGenerating}
+                speed={speed}
+                onOpenVoiceHearing={() => setIsHearingModalOpen(true)}
+              />
+
+              {/* Real-time word and character count indicator beneath TextInputArea component */}
+              <ScriptLengthIndicator
+                text={text}
+                speed={speed}
+              />
+
+              <AudioPlayerSection
+                currentClip={currentClip}
+                onExport={handleQuickExport}
+                onOpenExportModal={() => setIsExportModalOpen(true)}
+                exportingFormat={exportingFormat}
+              />
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Tab 3: Gemini Live Voice Assistant (gemini-3.8-live) */}
+        {activeTab === 'live' && (
+          <LiveVoiceAssistant
+            onInsertScriptToTTS={(transcriptText) => {
+              setText(transcriptText);
+              setActiveTab('tts');
+              showToast('Inserted live transcript into TTS Studio!', 'success');
+            }}
+          />
+        )}
       </main>
 
       {/* Export Customization Modal */}
@@ -268,6 +362,51 @@ export default function App() {
         onClearHistory={handleClearHistory}
         onExportClip={handleExportHistoryClip}
       />
+
+      {/* Freemium Monetization & Payment Gateway Modal */}
+      <PricingModal />
+
+      {/* Quota Limit Alert Modal */}
+      <LimitReachedModal />
+
+      {/* Official Copyright & License Certificate Modal */}
+      <CopyrightModal
+        isOpen={isCopyrightModalOpen}
+        onClose={() => setIsCopyrightModalOpen(false)}
+      />
+
+      {/* Windows Keyboard Shortcuts Cheat Sheet Modal */}
+      <WindowsShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setIsShortcutsModalOpen(false);
+        }}
+      />
+
+      {/* AI Voice Hearing & Speech Transcriber Modal */}
+      <VoiceHearingModal
+        isOpen={isHearingModalOpen}
+        onClose={() => setIsHearingModalOpen(false)}
+        onInsertToTTS={(transcribedText) => {
+          setText(transcribedText);
+          setActiveTab('tts');
+          showToast('Voice transcribed into TTS Studio!', 'success');
+        }}
+        onInsertToChat={(transcribedText) => {
+          setActiveTab('search');
+          showToast('Voice transcribed into Search!', 'info');
+        }}
+      />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <MonetizationProvider>
+      <StudioWorkspace />
+    </MonetizationProvider>
   );
 }

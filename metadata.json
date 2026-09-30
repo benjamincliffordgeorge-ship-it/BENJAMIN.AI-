@@ -1,6 +1,6 @@
 {
   "name": "BENJAMIN.AI",
   "description": "Convert text into lifelike speech with Indian and global voice options, audio tuning, and multi-format audio exports (MP3, WAV, OGG).",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { VoiceId, ToneStyle, AccentRegion } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { VoiceId, ToneStyle, AccentRegion, VoiceOption } from '../types';
 import { VOICES, TONE_STYLES } from '../data/voices';
-import { Check, Search, Globe, Sparkles } from 'lucide-react';
+import { Check, Search, Globe, Sparkles, Volume2, VolumeX, Ear, Play, Square } from 'lucide-react';
 
 interface VoiceSelectorProps {
   selectedVoice: VoiceId;
@@ -27,6 +27,74 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
   const [selectedRegion, setSelectedRegion] = useState<'All' | AccentRegion>('All');
   const [genderFilter, setGenderFilter] = useState<'All' | 'Female' | 'Male'>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+
+  // Clean up any ongoing speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      } catch (e) {
+        // Safe fallback in restricted iframes
+      }
+    };
+  }, []);
+
+  const handleHearVoice = (e: React.MouseEvent, voice: VoiceOption) => {
+    e.stopPropagation();
+
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        return;
+      }
+
+      if (playingVoiceId === voice.id) {
+        window.speechSynthesis.cancel();
+        setPlayingVoiceId(null);
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      setPlayingVoiceId(voice.id);
+
+      const auditionPhrase = `Hello! I'm ${voice.name}. I can voice your scripts with a natural ${voice.accent} accent.`;
+      const utterance = new SpeechSynthesisUtterance(auditionPhrase);
+
+      utterance.rate = Math.max(0.8, Math.min(1.4, speed || 1.0));
+      utterance.pitch = voice.gender === 'Female' ? 1.15 * (pitch || 1.0) : 0.95 * (pitch || 1.0);
+
+      const sysVoices = window.speechSynthesis.getVoices();
+      if (sysVoices && sysVoices.length > 0) {
+        const langMatch =
+          voice.accentRegion === 'Indian'
+            ? sysVoices.find((sv) => sv.lang.includes('en-IN') || sv.name.toLowerCase().includes('india'))
+            : voice.accentRegion === 'British'
+            ? sysVoices.find((sv) => sv.lang.includes('en-GB') || sv.name.toLowerCase().includes('uk'))
+            : voice.accentRegion === 'Australian'
+            ? sysVoices.find((sv) => sv.lang.includes('en-AU'))
+            : sysVoices.find((sv) => sv.lang.includes('en-US'));
+
+        if (langMatch) {
+          utterance.voice = langMatch;
+        }
+      }
+
+      utterance.onend = () => {
+        setPlayingVoiceId(null);
+      };
+
+      utterance.onerror = () => {
+        setPlayingVoiceId(null);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis preview unavailable:', err);
+      setPlayingVoiceId(null);
+    }
+  };
 
   // Filtered voice list
   const filteredVoices = useMemo(() => {
@@ -88,13 +156,19 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
       {/* Voices Header */}
       <div>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">
-              Voice & Accent Library
-            </h2>
-            <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono font-medium">
-              {VOICES.length} Voices
-            </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">
+                Voice & Accent Library
+              </h2>
+              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono font-medium">
+                {VOICES.length} Voices
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+              <Ear className="w-3 h-3 text-emerald-400" />
+              <span>Click <strong className="text-slate-200">Hear</strong> on any voice card to audition instant audio</span>
+            </p>
           </div>
 
           {/* Gender Filter Buttons */}
@@ -225,10 +299,18 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
               const isSelected = selectedVoice === v.id;
               const initials = v.name.slice(0, 2).toUpperCase();
               return (
-                <button
+                <div
                   key={v.id}
                   id={`voice-btn-${v.id}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectVoice(v.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectVoice(v.id);
+                    }
+                  }}
                   className={`text-left p-3 rounded-lg border transition-all cursor-pointer relative flex items-center justify-between group ${
                     isSelected
                       ? 'bg-emerald-500/10 border-emerald-500/30 text-white shadow-sm'
@@ -271,12 +353,38 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
                     </div>
                   </div>
 
-                  {isSelected && (
-                    <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 shrink-0 ml-2">
-                      <Check className="w-3 h-3 text-emerald-400" />
-                    </div>
-                  )}
-                </button>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      id={`hear-voice-btn-${v.id}`}
+                      onClick={(e) => handleHearVoice(e, v)}
+                      className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                        playingVoiceId === v.id
+                          ? 'bg-emerald-500 text-black border-emerald-400 animate-pulse'
+                          : 'bg-white/5 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-300 border-white/5 hover:border-emerald-500/30'
+                      }`}
+                      title={playingVoiceId === v.id ? 'Stop Voice Audition' : `Hear AI Voice Preview (${v.name})`}
+                    >
+                      {playingVoiceId === v.id ? (
+                        <>
+                          <Square className="w-3 h-3 fill-current" />
+                          <span className="text-[10px] font-bold">Stop</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-3 h-3" />
+                          <span className="text-[10px] font-medium hidden sm:inline">Hear</span>
+                        </>
+                      )}
+                    </button>
+
+                    {isSelected && (
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      </div>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>

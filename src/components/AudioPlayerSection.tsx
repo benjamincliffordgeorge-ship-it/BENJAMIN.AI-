@@ -213,6 +213,34 @@ export const AudioPlayerSection: React.FC<AudioPlayerSectionProps> = ({
     }
   };
 
+  // Listen for Windows keyboard shortcut events
+  useEffect(() => {
+    const handleTogglePlayback = () => {
+      togglePlayPause();
+    };
+
+    const handleSeekPlayback = (e: Event) => {
+      const customEvent = e as CustomEvent<{ delta: number }>;
+      if (customEvent.detail && typeof customEvent.detail.delta === 'number') {
+        handleSkip(customEvent.detail.delta);
+      }
+    };
+
+    const handleToggleMute = () => {
+      toggleMute();
+    };
+
+    window.addEventListener('benjamin:toggle-playback', handleTogglePlayback);
+    window.addEventListener('benjamin:seek-playback', handleSeekPlayback);
+    window.addEventListener('benjamin:toggle-mute', handleToggleMute);
+
+    return () => {
+      window.removeEventListener('benjamin:toggle-playback', handleTogglePlayback);
+      window.removeEventListener('benjamin:seek-playback', handleSeekPlayback);
+      window.removeEventListener('benjamin:toggle-mute', handleToggleMute);
+    };
+  }, [togglePlayPause, handleSkip, toggleMute]);
+
   // Draw Waveform Visualizer on Canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -316,10 +344,14 @@ export const AudioPlayerSection: React.FC<AudioPlayerSectionProps> = ({
           <button
             id="more-export-opts-btn"
             onClick={onOpenExportModal}
+            title="Configure Lossless WAV, MP3, OGG [Ctrl + E]"
             className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white px-3 py-1.5 rounded-md border border-white/10 text-xs font-medium transition-all cursor-pointer"
           >
             <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>Export Settings</span>
+            <kbd className="hidden sm:inline-block px-1 py-0.2 bg-[#0a0b0d] border border-white/10 rounded text-[9px] font-mono text-slate-400 ml-1">
+              Ctrl+E
+            </kbd>
           </button>
         </div>
       </div>
@@ -356,7 +388,7 @@ export const AudioPlayerSection: React.FC<AudioPlayerSectionProps> = ({
             id="audio-play-pause-btn"
             onClick={togglePlayPause}
             className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black flex items-center justify-center transition-transform cursor-pointer shadow-sm"
-            title={isPlaying ? 'Pause' : 'Play'}
+            title={isPlaying ? 'Pause [Space or Alt + P]' : 'Play [Space or Alt + P]'}
           >
             {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
           </button>
@@ -365,7 +397,7 @@ export const AudioPlayerSection: React.FC<AudioPlayerSectionProps> = ({
             id="audio-rewind-5s-btn"
             onClick={() => handleSkip(-5)}
             className="p-2 rounded-md bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition-colors cursor-pointer"
-            title="Rewind 5s"
+            title="Rewind 5s [Alt + ←]"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -374,7 +406,7 @@ export const AudioPlayerSection: React.FC<AudioPlayerSectionProps> = ({
             id="audio-forward-5s-btn"
             onClick={() => handleSkip(5)}
             className="p-2 rounded-md bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition-colors cursor-pointer"
-            title="Forward 5s"
+            title="Forward 5s [Alt + →]"
           >
             <RotateCw className="w-4 h-4" />
           </button>
@@ -421,6 +453,7 @@ export const AudioPlayerSection: React.FC<AudioPlayerSectionProps> = ({
           <button
             id="audio-mute-toggle-btn"
             onClick={toggleMute}
+            title={isMuted ? 'Unmute [Alt + M]' : 'Mute [Alt + M]'}
             className="text-slate-500 hover:text-slate-300 p-1 cursor-pointer"
           >
             {isMuted || volume === 0 ? (

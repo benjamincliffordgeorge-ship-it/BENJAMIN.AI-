@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TEXT_TEMPLATES } from '../data/voices';
-import { Trash2, Clock, Loader2, Volume2, Bookmark } from 'lucide-react';
+import { Trash2, Clock, Loader2, Volume2, Bookmark, Coins, Ear, Mic } from 'lucide-react';
+import { useMonetization } from '../context/MonetizationContext';
 
 interface TextInputAreaProps {
   text: string;
@@ -8,6 +9,7 @@ interface TextInputAreaProps {
   onSynthesize: () => void;
   isGenerating: boolean;
   speed: number;
+  onOpenVoiceHearing?: () => void;
 }
 
 export const TextInputArea: React.FC<TextInputAreaProps> = ({
@@ -16,8 +18,30 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
   onSynthesize,
   isGenerating,
   speed,
+  onOpenVoiceHearing,
 }) => {
   const [showTemplates, setShowTemplates] = useState(false);
+  const { checkFeatureAllowance, openPricingModal } = useMonetization();
+  const allowance = checkFeatureAllowance('voice');
+
+  // Listen for custom events dispatched from Windows shortcuts
+  useEffect(() => {
+    const handleToggleTemplates = () => {
+      setShowTemplates((prev) => !prev);
+    };
+
+    const handleClearScript = () => {
+      onChangeText('');
+    };
+
+    window.addEventListener('benjamin:toggle-sample-scripts', handleToggleTemplates);
+    window.addEventListener('benjamin:clear-script', handleClearScript);
+
+    return () => {
+      window.removeEventListener('benjamin:toggle-sample-scripts', handleToggleTemplates);
+      window.removeEventListener('benjamin:clear-script', handleClearScript);
+    };
+  }, [onChangeText]);
 
   // Calculate statistics
   const trimmed = text.trim();
@@ -48,14 +72,34 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
         </h2>
 
         <div className="flex items-center gap-2">
+          {onOpenVoiceHearing && (
+            <button
+              id="voice-hearing-btn"
+              type="button"
+              onClick={onOpenVoiceHearing}
+              title="AI Voice Hearing & Speech Dictation [Alt + H]"
+              className="flex items-center gap-1.5 text-xs text-emerald-300 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium"
+            >
+              <Ear className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Voice Hearing</span>
+              <kbd className="hidden sm:inline-block px-1 py-0.2 bg-[#0a0b0d] border border-emerald-500/30 rounded text-[9px] font-mono text-emerald-400 ml-1">
+                Alt+H
+              </kbd>
+            </button>
+          )}
+
           <button
             id="toggle-templates-btn"
             type="button"
             onClick={() => setShowTemplates(!showTemplates)}
+            title="Toggle Sample Scripts [Ctrl + Shift + S]"
             className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium"
           >
             <Bookmark className="w-3.5 h-3.5 text-emerald-400" />
             <span>Sample Scripts</span>
+            <kbd className="hidden sm:inline-block px-1 py-0.2 bg-[#0a0b0d] border border-white/10 rounded text-[9px] font-mono text-slate-400 ml-1">
+              Ctrl+Shift+S
+            </kbd>
           </button>
 
           {text && (
@@ -64,7 +108,7 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
               type="button"
               onClick={() => onChangeText('')}
               className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-400 p-1 rounded transition-colors cursor-pointer"
-              title="Clear text"
+              title="Clear text [Ctrl + Shift + X]"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -143,26 +187,65 @@ export const TextInputArea: React.FC<TextInputAreaProps> = ({
       </div>
 
       {/* Stats Bar & Action Button */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-white/5">
-        {/* Character & Reading duration stats */}
-        <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">
-          <span className="bg-white/5 px-2 py-1 rounded text-slate-400">
-            {charCount.toLocaleString()} chars
+      <div
+        id="text-input-metrics-bar"
+        className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-white/5"
+      >
+        {/* Real-time word and character count indicator */}
+        <div
+          id="text-input-stats-indicator"
+          className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400 font-mono"
+        >
+          <span
+            id="text-input-word-count"
+            className="bg-white/5 border border-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium"
+          >
+            <strong className="text-white font-bold">{wordCount}</strong> {wordCount === 1 ? 'word' : 'words'}
           </span>
-          <span className="bg-white/5 px-2 py-1 rounded text-slate-400">
-            {wordCount} words
+          <span
+            id="text-input-char-count"
+            className="bg-white/5 border border-white/5 px-2.5 py-1 rounded-md text-slate-300 font-medium"
+          >
+            <strong className="text-white font-bold">{charCount.toLocaleString()}</strong> chars
           </span>
-          <div className="flex items-center gap-1 text-slate-400">
-            <Clock className="w-3.5 h-3.5 text-emerald-500" />
+          <div
+            id="text-input-audio-duration"
+            className="flex items-center gap-1.5 text-slate-400 bg-white/5 border border-white/5 px-2.5 py-1 rounded-md"
+          >
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
             <span>~{estimatedSeconds}s audio</span>
           </div>
         </div>
 
-        {/* Generate Button */}
+        {/* Generate Button & Monetization Quota Indicator */}
         <div className="flex items-center gap-2">
-          <span className="hidden sm:inline text-[11px] text-slate-600 font-mono">
-            ⌘ + Enter
-          </span>
+          {allowance.isFreeTier && allowance.remainingFree !== Infinity ? (
+            <span
+              id="voice-free-quota-badge"
+              className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-emerald-500/20 transition-colors"
+              onClick={() => openPricingModal('usage')}
+              title="Daily free voice generations remaining"
+            >
+              {allowance.remainingFree}/10 free today
+            </span>
+          ) : (
+            <span
+              id="voice-credit-cost-badge"
+              className="text-[11px] font-mono text-slate-400 bg-white/5 border border-white/10 px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer hover:text-white"
+              onClick={() => openPricingModal('credits')}
+              title="1 Credit per voice generation"
+            >
+              <Coins className="w-3 h-3 text-emerald-400" />
+              <span>1 Credit</span>
+            </span>
+          )}
+
+          <kbd
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-1 bg-[#14171c] border border-white/10 rounded text-[10px] font-mono text-slate-400 shadow-sm"
+            title="Press Ctrl + Enter to synthesize speech"
+          >
+            <span className="text-white font-bold">Ctrl</span> + <span className="text-white font-bold">Enter</span>
+          </kbd>
           <button
             id="synthesize-audio-btn"
             type="button"
